@@ -11,3 +11,6 @@ wheels/
 
 # Environment variables
 .env
+
+# 명세
+docs/
