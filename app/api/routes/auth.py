@@ -19,7 +19,7 @@ def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="이미 존재하는 이메일입니다"
+            detail="이미 사용 중인 이메일입니다"
         )
     
     # 새 유저 생성
@@ -43,7 +43,8 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="이메일 또는 비밀번호가 잘못되었습니다"
+            detail="이메일 또는 비밀번호가 올바르지 않습니다",
+            headers={"WWW-Authenticate": "Bearer"}
         )
     
     # 비밀번호 검증

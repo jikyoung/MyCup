@@ -1,5 +1,6 @@
 # app/config.py
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 
 class Settings(BaseSettings):
     """환경변수 설정"""
@@ -16,8 +17,14 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     
-    # OpenAI API (나중에 추가)
+    # OpenAI API
     openai_api_key: str = ""
+    
+    @field_validator('secret_key')
+    def validate_secret_key(cls, v):
+        if len(v) < 32:
+            raise ValueError('SECRET_KEY는 최소 32자 이상이어야 합니다')
+        return v
     
     class Config:
         env_file = ".env"

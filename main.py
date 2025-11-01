@@ -8,17 +8,13 @@ app = FastAPI(
     debug=settings.debug
 )
 
+# 라우터 등록
 app.include_router(auth.router)
 
-@app.get("/")
-def health_check():
-    """서버 작동 확인"""
-    return {
-        "status": "ok",
-        "message": f"{settings.app_name} is running"
-    }
-
 @app.get("/health")
-def health():
+def health_check():
     """헬스체크"""
-    return {"status": "healthy"}
+    return {
+        "status": "healthy",
+        "service": settings.app_name
+    }
