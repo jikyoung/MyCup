@@ -1,12 +1,12 @@
 # app/schemas/user.py
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 
 class UserCreate(BaseModel):
     """회원가입 요청"""
     email: EmailStr
-    username: str
-    password: str
+    username: str = Field(..., min_length=2, max_length=50)
+    password: str = Field(..., min_length=8, max_length=100)
 
 class UserLogin(BaseModel):
     """로그인 요청"""
