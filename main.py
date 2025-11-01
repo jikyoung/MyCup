@@ -1,11 +1,14 @@
 # main.py
 from fastapi import FastAPI
 from app.config import settings
+from app.api.routes import auth
 
 app = FastAPI(
     title=settings.app_name,
     debug=settings.debug
 )
+
+app.include_router(auth.router)
 
 @app.get("/")
 def health_check():
