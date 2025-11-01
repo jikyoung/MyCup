@@ -50,8 +50,8 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
     # 비밀번호 검증
     if not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="이메일 또는 비밀번호가 잘못되었습니다"
+            detail="이메일 또는 비밀번호가 올바르지 않습니다",
+            headers={"WWW-Authenticate": "Bearer"}
         )
     
     # JWT 토큰 생성
