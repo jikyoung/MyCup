@@ -1,5 +1,5 @@
 # app/api/routes/photos.py
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List
 import os
@@ -87,3 +87,60 @@ async def upload_photos(
         "photos": uploaded_photos,
         "total": len(uploaded_photos)
     }
+
+@router.get("/", response_model=List[PhotoResponse])
+def get_my_photos(
+    page: int = Query(1, ge=1, description="페이지 번호"),
+    limit: int = Query(20, ge=1, le=100, description="페이지당 개수"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """내 사진 목록 조회 (페이지네이션)"""
+    
+    # 전체 개수
+    total = db.query(Photo).filter(Photo.user_id == current_user.id).count()
+    
+    # 페이지네이션
+    skip = (page - 1) * limit
+    photos = db.query(Photo)\
+        .filter(Photo.user_id == current_user.id)\
+        .order_by(Photo.uploaded_at.desc())\
+        .offset(skip)\
+        .limit(limit)\
+        .all()
+    
+    return photos
+
+@router.delete("/{photo_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_photo(
+    photo_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """사진 삭제"""
+    
+    # 사진 조회
+    photo = db.query(Photo).filter(Photo.id == photo_id).first()
+    
+    if not photo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="사진을 찾을 수 없습니다"
+        )
+    
+    # 권한 체크 (본인 사진만 삭제 가능)
+    if photo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="삭제 권한이 없습니다"
+        )
+    
+    # 파일 삭제
+    if os.path.exists(photo.file_path):
+        os.remove(photo.file_path)
+    
+    # DB에서 삭제
+    db.delete(photo)
+    db.commit()
+    
+    return None
