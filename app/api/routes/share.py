@@ -88,83 +88,87 @@ def create_share_link(
     )
 
 @router.get("/{share_id}", response_model=SharedWorldcupResponse)
+@router.get("/{share_id}", response_model=SharedWorldcupResponse)
 def get_shared_worldcup(
     share_id: str,
     db: Session = Depends(get_db)
 ):
     """공유된 월드컵 조회 (인증 불필요)"""
     
-    try:
-        # 공유 링크 조회
-        share = db.query(Share).filter(Share.id == share_id).first()
-        if not share:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="공유 링크를 찾을 수 없습니다"
+    # 공유 링크 조회
+    share = db.query(Share).filter(Share.id == share_id).first()
+    if not share:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="공유 링크를 찾을 수 없습니다"
+        )
+    
+    # 만료 확인
+    if share.is_expired():
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="만료된 공유 링크입니다"
+        )
+    
+    # 공개 여부 확인
+    if not share.is_public:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="비공개 처리된 공유 링크입니다"
+        )
+    
+    # 월드컵 조회
+    worldcup = share.worldcup
+    user = share.user
+    
+    # 순위 계산
+    rankings_data = worldcup_service.get_worldcup_rankings(db, worldcup.id)
+    rankings = [
+        RankingPhoto(
+            rank=item["rank"],
+            photo=PhotoInMatch(
+                id=item["photo"].id,
+                url=item["photo"].url
             )
-        
-        # 만료 확인
-        if share.is_expired():
-            raise HTTPException(
-                status_code=status.HTTP_410_GONE,
-                detail="만료된 공유 링크입니다"
-            )
-        
-        # 공개 여부 확인
-        if not share.is_public:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="비공개 처리된 공유 링크입니다"
-            )
-        
-        # 월드컵 조회
-        worldcup = share.worldcup
-        user = share.user
-        
-        print(f"월드컵 ID: {worldcup.id}")  # 디버깅
-        
-        # 순위 계산
-        rankings_data = worldcup_service.get_worldcup_rankings(db, worldcup.id)
-        print(f"순위 데이터: {len(rankings_data)}개")  # 디버깅
-        
-        rankings = [
-            RankingPhoto(
-                rank=item["rank"],
-                photo=PhotoInMatch(
-                    id=item["photo"].id,
-                    url=item["photo"].url
-                )
-            )
-            for item in rankings_data
-        ]
-        
-        # AI 분석
+        )
+        for item in rankings_data
+    ]
+    
+    # 캐시된 분석 결과 확인
+    if worldcup.analysis_result:
+        # 캐시 사용 (빠름!)
+        print("캐시된 분석 결과 사용")
+        analysis_data = worldcup.analysis_result
+        overall_keywords = analysis_data["overall_keywords"]
+        primary_emotion = analysis_data["primary_emotion"]
+        insight_story = analysis_data["insight_story"]
+    else:
+        # 실시간 분석 (느림, 첫 조회만)
+        print("실시간 AI 분석 실행")
         photo_paths = [item["photo"].file_path for item in rankings_data]
-        print(f"AI 분석 시작: {len(photo_paths)}장")  # 디버깅
-        
         batch_analysis = ai_service.analyze_multiple_photos(photo_paths)
         winner_analysis = ai_service.analyze_photo_from_path(rankings_data[0]["photo"].file_path)
         insight_story = ai_service.generate_insight_story(batch_analysis, winner_analysis)
         
-        print("응답 생성 중...")  # 디버깅
+        overall_keywords = batch_analysis["overall_keywords"]
+        primary_emotion = batch_analysis["primary_emotion"]
         
-        result = SharedWorldcupResponse(
-            worldcup_id=worldcup.id,
-            username=user.username,
-            round_type=worldcup.round_type,
-            rankings=rankings,
-            overall_keywords=batch_analysis["overall_keywords"],
-            primary_emotion=batch_analysis["primary_emotion"],
-            insight_story=insight_story,
-            card_images=None,
-            created_at=worldcup.created_at
-        )
-        
-        print("응답 완료!")  # 디버깅
-        return result
-        
-    except Exception as e:
-        print(f"에러 발생: {e}")  # 디버깅
-        import traceback
-        traceback.print_exc()
-        raise
+        # 결과 저장 (다음번엔 빠름)
+        worldcup.analysis_result = {
+            "overall_keywords": overall_keywords,
+            "primary_emotion": primary_emotion,
+            "insight_story": insight_story
+        }
+        db.commit()
+    
+    return SharedWorldcupResponse(
+        worldcup_id=worldcup.id,
+        username=user.username,
+        round_type=worldcup.round_type,
+        rankings=rankings,
+        overall_keywords=overall_keywords,
+        primary_emotion=primary_emotion,
+        insight_story=insight_story,
+        card_images=None,
+        created_at=worldcup.created_at
+    )

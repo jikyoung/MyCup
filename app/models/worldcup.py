@@ -1,5 +1,5 @@
 # app/models/worldcup.py
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Enum as SQLEnum, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -29,7 +29,8 @@ class Worldcup(Base):
     # 타임스탬프
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
-    
+    analysis_result = Column(JSON, nullable=True)
+        
     # 관계
     user = relationship("User", backref="worldcups")
     winner = relationship("Photo", foreign_keys=[winner_photo_id])
