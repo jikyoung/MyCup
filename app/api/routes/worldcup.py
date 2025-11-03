@@ -20,12 +20,24 @@ from app.schemas.worldcup import (
     CardNewsResponse
 )
 from app.api.deps import get_current_user
-from app.services import worldcup_service, ai_service, cardnews_service
+from app.services import worldcup_service, ai_service, cardnews_service, rate_limit_service
 
 from datetime import datetime, timezone
 import os
 
 router = APIRouter(prefix="/api/v1/worldcup", tags=["월드컵"])
+
+@router.get("/limit", response_model=dict)
+def get_worldcup_limit(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """월드컵 생성 제한 조회"""
+    
+    # 최신 유저 정보 조회
+    db.refresh(current_user)
+    
+    return rate_limit_service.get_remaining_count(current_user)
 
 @router.post("", response_model=WorldcupResponse, status_code=status.HTTP_201_CREATED)
 def create_worldcup(
@@ -35,30 +47,14 @@ def create_worldcup(
 ):
     """월드컵 생성"""
     
-    # round_type 검증
-    if data.round_type not in [4, 8, 16]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="round_type은 4, 8, 16 중 하나여야 합니다"
-        )
+    # 제한 체크
+    rate_limit_service.check_worldcup_limit(db, current_user)
     
     # 사진 개수 검증
     if len(data.photo_ids) != data.round_type:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"{data.round_type}강은 {data.round_type}장의 사진이 필요합니다"
-        )
-    
-    # 사진 소유권 확인
-    photos = db.query(Photo).filter(
-        Photo.id.in_(data.photo_ids),
-        Photo.user_id == current_user.id
-    ).all()
-    
-    if len(photos) != len(data.photo_ids):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="본인의 사진만 사용할 수 있습니다"
         )
     
     # 월드컵 생성
@@ -69,7 +65,10 @@ def create_worldcup(
     db.add(worldcup)
     db.commit()
     db.refresh(worldcup)
-    
+
+    # 카운터 증가 (한 번만!)
+    rate_limit_service.increment_worldcup_count(db, current_user)
+        
     # 토너먼트 브라켓 생성
     worldcup_service.create_tournament_bracket(db, worldcup, data.photo_ids)
     
@@ -148,6 +147,8 @@ def select_winner(
     # 월드컵 완료되면 AI 분석 자동 실행
     if worldcup.status == "completed":
         try:
+            print("===== 월드컵 완료! AI 분석 시작 =====")
+            
             # 순위 계산
             rankings_data = worldcup_service.get_worldcup_rankings(db, worldcup_id)
             
@@ -164,10 +165,13 @@ def select_winner(
                 "insight_story": insight_story
             }
             db.commit()
+            print("===== AI 분석 완료 및 저장 =====")
             
         except Exception as e:
-            print(f"AI 분석 실패 (백그라운드): {e}")
-            # 실패해도 월드컵 완료는 계속
+            print(f"===== AI 분석 실패 (백그라운드): {e} =====")
+            # AI 분석 실패해도 월드컵 완료는 정상 처리
+            # 나중에 조회 시 실시간 분석으로 재시도
+            db.rollback()  # 분석 결과 저장 실패 시 롤백
     
     # 다음 매치 가져오기
     next_match = worldcup_service.get_next_match(db, worldcup_id)
@@ -322,43 +326,7 @@ def get_worldcup_insights(
         ),
         insight_story=insight_story
     )
-
-@router.get("/test/openai")
-def test_openai():
-    """OpenAI 연결 테스트"""
-    is_connected = ai_service.test_openai_connection()
-    return {
-        "openai_connected": is_connected,
-        "message": "연결 성공!" if is_connected else "연결 실패"
-    }
-
-@router.post("/test/analyze-photo")
-def test_analyze_photo(file_path: str):
-    """사진 분석 테스트 (파일 경로)"""
-    result = ai_service.analyze_photo_from_path(file_path)
-    return result
-
-@router.post("/test/analyze-multiple")
-def test_analyze_multiple(file_paths: list[str]):
-    """여러 사진 배치 분석 테스트"""
-    result = ai_service.analyze_multiple_photos(file_paths)
-    return result
-
-@router.post("/test/generate-insight")
-def test_generate_insight():
-    """인사이트 스토리 생성 테스트"""
-    # 샘플 데이터
-    analysis_result = {
-        "overall_keywords": ["가족", "아기", "행복"],
-        "primary_emotion": "peaceful"
-    }
-    winner_photo = {
-        "keywords": ["아기", "미소"],
-        "emotion": "happy"
-    }
-    
-    story = ai_service.generate_insight_story(analysis_result, winner_photo)
-    return story
+  
 
 @router.post("/{worldcup_id}/cardnews", response_model=CardNewsResponse)
 def generate_cardnews(

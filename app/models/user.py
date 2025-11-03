@@ -1,5 +1,5 @@
 # app/models/user.py
-from sqlalchemy import Column, String, Boolean, DateTime
+from sqlalchemy import Column, String, Boolean, DateTime, Integer
 from sqlalchemy.sql import func
 from app.database import Base
 import uuid
@@ -21,6 +21,11 @@ class User(Base):
     # 타임스탬프
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # 월드컵 생성 제한
+    worldcup_count = Column(Integer, default=0)  # 생성한 월드컵 총 개수
+    monthly_worldcup_count = Column(Integer, default=0)  # 이번 달 생성 개수
+    last_reset_at = Column(DateTime(timezone=True), nullable=True)  # 마지막 리셋 시간
     
     def __repr__(self):
         return f"<User {self.email}>"
