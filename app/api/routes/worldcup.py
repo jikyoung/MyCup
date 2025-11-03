@@ -16,10 +16,14 @@ from app.schemas.worldcup import (
     WorldcupResultResponse,
     RankingPhoto,
     WorldcupInsightResponse, 
-    PhotoAnalysis
+    PhotoAnalysis,
+    CardNewsResponse
 )
 from app.api.deps import get_current_user
-from app.services import worldcup_service, ai_service
+from app.services import worldcup_service, ai_service, cardnews_service
+
+from datetime import datetime, timezone
+import os
 
 router = APIRouter(prefix="/api/v1/worldcup", tags=["월드컵"])
 
@@ -317,3 +321,70 @@ def test_generate_insight():
     
     story = ai_service.generate_insight_story(analysis_result, winner_photo)
     return story
+
+@router.post("/{worldcup_id}/cardnews", response_model=CardNewsResponse)
+def generate_cardnews(
+    worldcup_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """카드뉴스 생성"""
+    
+    # 월드컵 조회
+    worldcup = db.query(Worldcup).filter(Worldcup.id == worldcup_id).first()
+    if not worldcup:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="월드컵을 찾을 수 없습니다"
+        )
+    
+    # 권한 체크
+    if worldcup.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="권한이 없습니다"
+        )
+    
+    # 완료 여부 확인
+    if worldcup.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="아직 진행 중인 월드컵입니다"
+        )
+    
+    # 순위 계산
+    rankings_data = worldcup_service.get_worldcup_rankings(db, worldcup_id)
+    
+    # AI 분석
+    photo_paths = [item["photo"].file_path for item in rankings_data]
+    batch_analysis = ai_service.analyze_multiple_photos(photo_paths)
+    winner_analysis = ai_service.analyze_photo_from_path(rankings_data[0]["photo"].file_path)
+    insight_story = ai_service.generate_insight_story(batch_analysis, winner_analysis)
+    
+    # 카드뉴스 데이터 준비
+    rankings_for_card = []
+    for item in rankings_data[:3]:  # TOP 3만
+        # 개별 사진 분석
+        photo_analysis = ai_service.analyze_photo_from_path(item["photo"].file_path)
+        rankings_for_card.append({
+            "rank": item["rank"],
+            "photo_path": item["photo"].file_path,
+            "keywords": photo_analysis["keywords"]
+        })
+    
+    # 카드뉴스 생성
+    card_paths = cardnews_service.generate_cardnews(
+        insight_story=insight_story,
+        overall_keywords=batch_analysis["overall_keywords"],
+        rankings=rankings_for_card
+    )
+    
+    # URL로 변환
+    card_urls = [f"/uploads/cardnews/{os.path.basename(path)}" for path in card_paths]
+    
+    return CardNewsResponse(
+        worldcup_id=worldcup_id,
+        card_images=card_urls,
+        total_cards=len(card_urls),
+        created_at=datetime.now(timezone.utc)
+    )
