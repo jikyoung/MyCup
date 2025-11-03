@@ -322,43 +322,7 @@ def get_worldcup_insights(
         ),
         insight_story=insight_story
     )
-
-@router.get("/test/openai")
-def test_openai():
-    """OpenAI 연결 테스트"""
-    is_connected = ai_service.test_openai_connection()
-    return {
-        "openai_connected": is_connected,
-        "message": "연결 성공!" if is_connected else "연결 실패"
-    }
-
-@router.post("/test/analyze-photo")
-def test_analyze_photo(file_path: str):
-    """사진 분석 테스트 (파일 경로)"""
-    result = ai_service.analyze_photo_from_path(file_path)
-    return result
-
-@router.post("/test/analyze-multiple")
-def test_analyze_multiple(file_paths: list[str]):
-    """여러 사진 배치 분석 테스트"""
-    result = ai_service.analyze_multiple_photos(file_paths)
-    return result
-
-@router.post("/test/generate-insight")
-def test_generate_insight():
-    """인사이트 스토리 생성 테스트"""
-    # 샘플 데이터
-    analysis_result = {
-        "overall_keywords": ["가족", "아기", "행복"],
-        "primary_emotion": "peaceful"
-    }
-    winner_photo = {
-        "keywords": ["아기", "미소"],
-        "emotion": "happy"
-    }
-    
-    story = ai_service.generate_insight_story(analysis_result, winner_photo)
-    return story
+  
 
 @router.post("/{worldcup_id}/cardnews", response_model=CardNewsResponse)
 def generate_cardnews(
