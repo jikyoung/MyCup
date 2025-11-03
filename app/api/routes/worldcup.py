@@ -145,6 +145,30 @@ def select_winner(
     # 다음 라운드 진행
     worldcup_service.advance_to_next_round(db, worldcup)
     
+    # 월드컵 완료되면 AI 분석 자동 실행
+    if worldcup.status == "completed":
+        try:
+            # 순위 계산
+            rankings_data = worldcup_service.get_worldcup_rankings(db, worldcup_id)
+            
+            # AI 분석
+            photo_paths = [item["photo"].file_path for item in rankings_data]
+            batch_analysis = ai_service.analyze_multiple_photos(photo_paths)
+            winner_analysis = ai_service.analyze_photo_from_path(rankings_data[0]["photo"].file_path)
+            insight_story = ai_service.generate_insight_story(batch_analysis, winner_analysis)
+            
+            # 결과 저장
+            worldcup.analysis_result = {
+                "overall_keywords": batch_analysis["overall_keywords"],
+                "primary_emotion": batch_analysis["primary_emotion"],
+                "insight_story": insight_story
+            }
+            db.commit()
+            
+        except Exception as e:
+            print(f"AI 분석 실패 (백그라운드): {e}")
+            # 실패해도 월드컵 완료는 계속
+    
     # 다음 매치 가져오기
     next_match = worldcup_service.get_next_match(db, worldcup_id)
     
@@ -256,27 +280,41 @@ def get_worldcup_insights(
         for item in rankings_data
     ]
     
-    # 모든 사진 경로 수집
-    photo_paths = [item["photo"].file_path for item in rankings_data]
-    
-    # 배치 분석
-    batch_analysis = ai_service.analyze_multiple_photos(photo_paths)
-    
-    # 1위 사진 분석
-    winner_photo = rankings_data[0]["photo"]
-    winner_analysis_result = ai_service.analyze_photo_from_path(winner_photo.file_path)
-    
-    # 인사이트 스토리 생성
-    insight_story = ai_service.generate_insight_story(
-        batch_analysis,
-        winner_analysis_result
-    )
+    # 캐시된 분석 결과 확인
+    if worldcup.analysis_result:
+        # 캐시 사용 (빠름!)
+        print("캐시된 분석 결과 사용")
+        analysis_data = worldcup.analysis_result
+        overall_keywords = analysis_data["overall_keywords"]
+        primary_emotion = analysis_data["primary_emotion"]
+        insight_story = analysis_data["insight_story"]
+        
+        # 1위 사진 분석 (캐시에 없으면 실시간)
+        winner_analysis_result = ai_service.analyze_photo_from_path(rankings_data[0]["photo"].file_path)
+    else:
+        # 실시간 분석 (느림, 첫 조회만)
+        print("실시간 AI 분석 실행")
+        photo_paths = [item["photo"].file_path for item in rankings_data]
+        batch_analysis = ai_service.analyze_multiple_photos(photo_paths)
+        winner_analysis_result = ai_service.analyze_photo_from_path(rankings_data[0]["photo"].file_path)
+        insight_story = ai_service.generate_insight_story(batch_analysis, winner_analysis_result)
+        
+        overall_keywords = batch_analysis["overall_keywords"]
+        primary_emotion = batch_analysis["primary_emotion"]
+        
+        # 결과 저장
+        worldcup.analysis_result = {
+            "overall_keywords": overall_keywords,
+            "primary_emotion": primary_emotion,
+            "insight_story": insight_story
+        }
+        db.commit()
     
     return WorldcupInsightResponse(
         worldcup_id=worldcup.id,
         rankings=rankings,
-        overall_keywords=batch_analysis["overall_keywords"],
-        primary_emotion=batch_analysis["primary_emotion"],
+        overall_keywords=overall_keywords,
+        primary_emotion=primary_emotion,
         winner_analysis=PhotoAnalysis(
             keywords=winner_analysis_result["keywords"],
             emotion=winner_analysis_result["emotion"],
