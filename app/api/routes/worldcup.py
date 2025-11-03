@@ -17,7 +17,7 @@ from app.schemas.worldcup import (
     RankingPhoto
 )
 from app.api.deps import get_current_user
-from app.services import worldcup_service
+from app.services import worldcup_service, ai_service
 
 router = APIRouter(prefix="/api/v1/worldcup", tags=["월드컵"])
 
@@ -206,3 +206,18 @@ def get_worldcup_result(
         rankings=rankings,
         completed_at=worldcup.completed_at
     )
+
+@router.get("/test/openai")
+def test_openai():
+    """OpenAI 연결 테스트"""
+    is_connected = ai_service.test_openai_connection()
+    return {
+        "openai_connected": is_connected,
+        "message": "연결 성공!" if is_connected else "연결 실패"
+    }
+
+@router.post("/test/analyze-photo")
+def test_analyze_photo(file_path: str):
+    """사진 분석 테스트 (파일 경로)"""
+    result = ai_service.analyze_photo_from_path(file_path)
+    return result
