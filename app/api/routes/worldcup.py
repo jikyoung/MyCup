@@ -12,7 +12,9 @@ from app.schemas.worldcup import (
     WorldcupResponse, 
     MatchSelectRequest,
     MatchResponse,
-    PhotoInMatch
+    PhotoInMatch,
+    WorldcupResultResponse,
+    RankingPhoto
 )
 from app.api.deps import get_current_user
 from app.services import worldcup_service
@@ -152,3 +154,55 @@ def select_winner(
             winner_photo_id=None
         ) if next_match else None
     }
+
+@router.get("/{worldcup_id}/result", response_model=WorldcupResultResponse)
+def get_worldcup_result(
+    worldcup_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """월드컵 결과 조회"""
+    
+    # 월드컵 조회
+    worldcup = db.query(Worldcup).filter(Worldcup.id == worldcup_id).first()
+    if not worldcup:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="월드컵을 찾을 수 없습니다"
+        )
+    
+    # 권한 체크
+    if worldcup.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="권한이 없습니다"
+        )
+    
+    # 완료 여부 확인
+    if worldcup.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="아직 진행 중인 월드컵입니다"
+        )
+    
+    # 순위 계산
+    rankings_data = worldcup_service.get_worldcup_rankings(db, worldcup_id)
+    
+    rankings = [
+        RankingPhoto(
+            rank=item["rank"],
+            photo=PhotoInMatch(
+                id=item["photo"].id,
+                url=item["photo"].url
+            )
+        )
+        for item in rankings_data
+    ]
+    
+    return WorldcupResultResponse(
+        worldcup_id=worldcup.id,
+        round_type=worldcup.round_type,
+        status=worldcup.status,
+        rankings=rankings,
+        completed_at=worldcup.completed_at
+    )

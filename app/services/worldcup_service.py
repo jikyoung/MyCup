@@ -91,3 +91,54 @@ def advance_to_next_round(db: Session, worldcup: Worldcup):
         db.add(match)
     
     db.commit()
+
+def get_worldcup_rankings(db: Session, worldcup_id: str) -> List[dict]:
+    """월드컵 순위 계산"""
+    
+    # 모든 매치 가져오기
+    matches = db.query(Match)\
+        .filter(Match.worldcup_id == worldcup_id)\
+        .order_by(Match.round_number.desc(), Match.match_order)\
+        .all()
+    
+    if not matches:
+        return []
+    
+    # 결승전 (마지막 라운드)
+    final_round = matches[0].round_number
+    final_match = matches[0]
+    
+    # 1위: 결승 승자
+    winner_id = final_match.winner_photo_id
+    
+    # 2위: 결승 패자
+    runner_up_id = final_match.photo_a_id if final_match.photo_b_id == winner_id else final_match.photo_b_id
+    
+    # 3-4위: 준결승 패자들
+    semifinal_losers = []
+    if final_round > 1:  # 4강 이상일 때만 준결승 있음
+        semifinal_matches = [m for m in matches if m.round_number == final_round - 1]
+        for match in semifinal_matches:
+            loser_id = match.photo_a_id if match.photo_b_id == match.winner_photo_id else match.photo_b_id
+            semifinal_losers.append(loser_id)
+    
+    # 순위 매기기
+    rankings = []
+    
+    # 1위
+    winner_photo = db.query(Photo).filter(Photo.id == winner_id).first()
+    if winner_photo:
+        rankings.append({"rank": 1, "photo_id": winner_id, "photo": winner_photo})
+    
+    # 2위
+    runner_up_photo = db.query(Photo).filter(Photo.id == runner_up_id).first()
+    if runner_up_photo:
+        rankings.append({"rank": 2, "photo_id": runner_up_id, "photo": runner_up_photo})
+    
+    # 3-4위
+    for i, loser_id in enumerate(semifinal_losers):
+        loser_photo = db.query(Photo).filter(Photo.id == loser_id).first()
+        if loser_photo:
+            rankings.append({"rank": 3, "photo_id": loser_id, "photo": loser_photo})
+    
+    return rankings

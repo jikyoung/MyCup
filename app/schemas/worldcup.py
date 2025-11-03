@@ -42,3 +42,22 @@ class WorldcupResponse(BaseModel):
 class MatchSelectRequest(BaseModel):
     """매치 선택 요청"""
     winner_photo_id: str
+
+class RankingPhoto(BaseModel):
+    """순위별 사진"""
+    rank: int
+    photo: PhotoInMatch
+    
+    class Config:
+        from_attributes = True
+
+class WorldcupResultResponse(BaseModel):
+    """월드컵 결과 응답"""
+    worldcup_id: str
+    round_type: int
+    status: str
+    rankings: List[RankingPhoto]
+    completed_at: datetime | None
+    
+    class Config:
+        from_attributes = True
