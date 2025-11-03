@@ -148,6 +148,8 @@ def select_winner(
     # 월드컵 완료되면 AI 분석 자동 실행
     if worldcup.status == "completed":
         try:
+            print("===== 월드컵 완료! AI 분석 시작 =====")
+            
             # 순위 계산
             rankings_data = worldcup_service.get_worldcup_rankings(db, worldcup_id)
             
@@ -164,10 +166,13 @@ def select_winner(
                 "insight_story": insight_story
             }
             db.commit()
+            print("===== AI 분석 완료 및 저장 =====")
             
         except Exception as e:
-            print(f"AI 분석 실패 (백그라운드): {e}")
-            # 실패해도 월드컵 완료는 계속
+            print(f"===== AI 분석 실패 (백그라운드): {e} =====")
+            # AI 분석 실패해도 월드컵 완료는 정상 처리
+            # 나중에 조회 시 실시간 분석으로 재시도
+            db.rollback()  # 분석 결과 저장 실패 시 롤백
     
     # 다음 매치 가져오기
     next_match = worldcup_service.get_next_match(db, worldcup_id)
