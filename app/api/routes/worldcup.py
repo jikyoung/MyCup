@@ -20,12 +20,24 @@ from app.schemas.worldcup import (
     CardNewsResponse
 )
 from app.api.deps import get_current_user
-from app.services import worldcup_service, ai_service, cardnews_service
+from app.services import worldcup_service, ai_service, cardnews_service, rate_limit_service
 
 from datetime import datetime, timezone
 import os
 
 router = APIRouter(prefix="/api/v1/worldcup", tags=["월드컵"])
+
+@router.get("/limit", response_model=dict)
+def get_worldcup_limit(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """월드컵 생성 제한 조회"""
+    
+    # 최신 유저 정보 조회
+    db.refresh(current_user)
+    
+    return rate_limit_service.get_remaining_count(current_user)
 
 @router.post("", response_model=WorldcupResponse, status_code=status.HTTP_201_CREATED)
 def create_worldcup(
@@ -35,30 +47,14 @@ def create_worldcup(
 ):
     """월드컵 생성"""
     
-    # round_type 검증
-    if data.round_type not in [4, 8, 16]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="round_type은 4, 8, 16 중 하나여야 합니다"
-        )
+    # 제한 체크
+    rate_limit_service.check_worldcup_limit(db, current_user)
     
     # 사진 개수 검증
     if len(data.photo_ids) != data.round_type:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"{data.round_type}강은 {data.round_type}장의 사진이 필요합니다"
-        )
-    
-    # 사진 소유권 확인
-    photos = db.query(Photo).filter(
-        Photo.id.in_(data.photo_ids),
-        Photo.user_id == current_user.id
-    ).all()
-    
-    if len(photos) != len(data.photo_ids):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="본인의 사진만 사용할 수 있습니다"
         )
     
     # 월드컵 생성
@@ -69,7 +65,10 @@ def create_worldcup(
     db.add(worldcup)
     db.commit()
     db.refresh(worldcup)
-    
+
+    # 카운터 증가 (한 번만!)
+    rate_limit_service.increment_worldcup_count(db, current_user)
+        
     # 토너먼트 브라켓 생성
     worldcup_service.create_tournament_bracket(db, worldcup, data.photo_ids)
     
