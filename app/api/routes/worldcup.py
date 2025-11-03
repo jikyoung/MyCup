@@ -14,7 +14,9 @@ from app.schemas.worldcup import (
     MatchResponse,
     PhotoInMatch,
     WorldcupResultResponse,
-    RankingPhoto
+    RankingPhoto,
+    WorldcupInsightResponse, 
+    PhotoAnalysis
 )
 from app.api.deps import get_current_user
 from app.services import worldcup_service, ai_service
@@ -207,6 +209,78 @@ def get_worldcup_result(
         completed_at=worldcup.completed_at
     )
 
+@router.get("/{worldcup_id}/insights", response_model=WorldcupInsightResponse)
+def get_worldcup_insights(
+    worldcup_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """월드컵 AI 인사이트 조회"""
+    
+    # 월드컵 조회
+    worldcup = db.query(Worldcup).filter(Worldcup.id == worldcup_id).first()
+    if not worldcup:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="월드컵을 찾을 수 없습니다"
+        )
+    
+    # 권한 체크
+    if worldcup.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="권한이 없습니다"
+        )
+    
+    # 완료 여부 확인
+    if worldcup.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="아직 진행 중인 월드컵입니다"
+        )
+    
+    # 순위 계산
+    rankings_data = worldcup_service.get_worldcup_rankings(db, worldcup_id)
+    rankings = [
+        RankingPhoto(
+            rank=item["rank"],
+            photo=PhotoInMatch(
+                id=item["photo"].id,
+                url=item["photo"].url
+            )
+        )
+        for item in rankings_data
+    ]
+    
+    # 모든 사진 경로 수집
+    photo_paths = [item["photo"].file_path for item in rankings_data]
+    
+    # 배치 분석
+    batch_analysis = ai_service.analyze_multiple_photos(photo_paths)
+    
+    # 1위 사진 분석
+    winner_photo = rankings_data[0]["photo"]
+    winner_analysis_result = ai_service.analyze_photo_from_path(winner_photo.file_path)
+    
+    # 인사이트 스토리 생성
+    insight_story = ai_service.generate_insight_story(
+        batch_analysis,
+        winner_analysis_result
+    )
+    
+    return WorldcupInsightResponse(
+        worldcup_id=worldcup.id,
+        rankings=rankings,
+        overall_keywords=batch_analysis["overall_keywords"],
+        primary_emotion=batch_analysis["primary_emotion"],
+        winner_analysis=PhotoAnalysis(
+            keywords=winner_analysis_result["keywords"],
+            emotion=winner_analysis_result["emotion"],
+            description=winner_analysis_result["description"]
+        ),
+        insight_story=insight_story
+    )
+
 @router.get("/test/openai")
 def test_openai():
     """OpenAI 연결 테스트"""
@@ -221,3 +295,25 @@ def test_analyze_photo(file_path: str):
     """사진 분석 테스트 (파일 경로)"""
     result = ai_service.analyze_photo_from_path(file_path)
     return result
+
+@router.post("/test/analyze-multiple")
+def test_analyze_multiple(file_paths: list[str]):
+    """여러 사진 배치 분석 테스트"""
+    result = ai_service.analyze_multiple_photos(file_paths)
+    return result
+
+@router.post("/test/generate-insight")
+def test_generate_insight():
+    """인사이트 스토리 생성 테스트"""
+    # 샘플 데이터
+    analysis_result = {
+        "overall_keywords": ["가족", "아기", "행복"],
+        "primary_emotion": "peaceful"
+    }
+    winner_photo = {
+        "keywords": ["아기", "미소"],
+        "emotion": "happy"
+    }
+    
+    story = ai_service.generate_insight_story(analysis_result, winner_photo)
+    return story

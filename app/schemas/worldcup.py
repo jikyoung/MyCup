@@ -61,3 +61,21 @@ class WorldcupResultResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+class PhotoAnalysis(BaseModel):
+    """사진 분석 결과"""
+    keywords: list[str]
+    emotion: str
+    description: str
+
+class WorldcupInsightResponse(BaseModel):
+    """월드컵 AI 인사이트 응답"""
+    worldcup_id: str
+    rankings: List[RankingPhoto]
+    overall_keywords: list[str]
+    primary_emotion: str
+    winner_analysis: PhotoAnalysis
+    insight_story: dict  # summary, detail
+    
+    class Config:
+        from_attributes = True
