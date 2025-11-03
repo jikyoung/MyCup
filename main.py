@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from app.config import settings
-from app.api.routes import auth, photos, worldcup
+from app.api.routes import auth, photos, worldcup, share
 
 app = FastAPI(
     title=settings.app_name,
@@ -13,6 +13,7 @@ app = FastAPI(
 app.include_router(auth.router)
 app.include_router(photos.router)
 app.include_router(worldcup.router)
+app.include_router(share.router)
 
 # 정적 파일 서빙 (업로드된 이미지)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
