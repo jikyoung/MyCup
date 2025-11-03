@@ -1,0 +1,131 @@
+# app/services/cardnews_service.py
+from PIL import Image, ImageDraw, ImageFont
+import os
+from datetime import datetime
+
+# 설정
+CARD_WIDTH = 1080
+CARD_HEIGHT = 1920
+BACKGROUND_COLOR = (255, 255, 255)
+PRIMARY_COLOR = (59, 130, 246)  # 파란색
+TEXT_COLOR = (17, 24, 39)  # 검은색
+SECONDARY_COLOR = (156, 163, 175)  # 회색
+
+FONT_PATH = "app/assets/fonts/AppleSDGothicNeo.ttc"
+OUTPUT_DIR = "uploads/cardnews"
+
+# 출력 폴더 생성
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+def create_cover_card(insight_story: dict, overall_keywords: list[str]) -> str:
+    """표지 카드 생성"""
+    
+    # 이미지 생성
+    img = Image.new('RGB', (CARD_WIDTH, CARD_HEIGHT), BACKGROUND_COLOR)
+    draw = ImageDraw.Draw(img)
+    
+    # 폰트
+    title_font = ImageFont.truetype(FONT_PATH, 100)
+    subtitle_font = ImageFont.truetype(FONT_PATH, 60)
+    keyword_font = ImageFont.truetype(FONT_PATH, 50)
+    
+    # 제목
+    draw.text((540, 400), "나의 2024", font=title_font, fill=PRIMARY_COLOR, anchor="mm")
+    draw.text((540, 550), "TOP 4", font=title_font, fill=PRIMARY_COLOR, anchor="mm")
+    
+    # AI 인사이트
+    summary = insight_story.get("summary", "")
+    draw.text((540, 800), summary, font=subtitle_font, fill=TEXT_COLOR, anchor="mm")
+    
+    detail = insight_story.get("detail", "")
+    draw.text((540, 920), detail, font=keyword_font, fill=SECONDARY_COLOR, anchor="mm")
+    
+    # 키워드
+    keywords_text = " · ".join(overall_keywords[:3])
+    draw.text((540, 1100), f"#{keywords_text}", font=keyword_font, fill=PRIMARY_COLOR, anchor="mm")
+    
+    # 날짜
+    date_text = datetime.now().strftime("%Y.%m.%d")
+    date_font = ImageFont.truetype(FONT_PATH, 40)
+    draw.text((540, 1700), date_text, font=date_font, fill=SECONDARY_COLOR, anchor="mm")
+    
+    # 저장
+    filename = f"cover_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+    filepath = os.path.join(OUTPUT_DIR, filename)
+    img.save(filepath, quality=90)
+    
+    return filepath
+
+
+def create_ranking_card(rank: int, photo_path: str, keywords: list[str]) -> str:
+    """순위 카드 생성"""
+    
+    # 이미지 생성
+    img = Image.new('RGB', (CARD_WIDTH, CARD_HEIGHT), BACKGROUND_COLOR)
+    draw = ImageDraw.Draw(img)
+    
+    # 메달 이모지
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    medal = medals.get(rank, "🏅")
+    
+    # 폰트
+    medal_font = ImageFont.truetype(FONT_PATH, 120)
+    rank_font = ImageFont.truetype(FONT_PATH, 80)
+    keyword_font = ImageFont.truetype(FONT_PATH, 50)
+    
+    # 메달 & 순위
+    draw.text((540, 200), medal, font=medal_font, anchor="mm")
+    draw.text((540, 350), f"{rank}위", font=rank_font, fill=TEXT_COLOR, anchor="mm")
+    
+    # 사진 삽입
+    try:
+        photo = Image.open(photo_path)
+        # 정사각형으로 크롭
+        min_side = min(photo.width, photo.height)
+        left = (photo.width - min_side) // 2
+        top = (photo.height - min_side) // 2
+        photo = photo.crop((left, top, left + min_side, top + min_side))
+        # 리사이즈
+        photo = photo.resize((800, 800), Image.Resampling.LANCZOS)
+        # 붙이기
+        img.paste(photo, (140, 500))
+    except Exception as e:
+        print(f"사진 삽입 실패: {e}")
+    
+    # 키워드
+    if keywords:
+        keywords_text = " · ".join(keywords[:3])
+        draw.text((540, 1400), keywords_text, font=keyword_font, fill=PRIMARY_COLOR, anchor="mm")
+    
+    # 저장
+    filename = f"rank{rank}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+    filepath = os.path.join(OUTPUT_DIR, filename)
+    img.save(filepath, quality=90)
+    
+    return filepath
+
+
+def generate_cardnews(
+    insight_story: dict,
+    overall_keywords: list[str],
+    rankings: list[dict]  # [{"rank": 1, "photo_path": "...", "keywords": [...]}]
+) -> list[str]:
+    """카드뉴스 전체 생성"""
+    
+    card_paths = []
+    
+    # 1. 표지
+    cover = create_cover_card(insight_story, overall_keywords)
+    card_paths.append(cover)
+    
+    # 2. 순위별 카드 (TOP 3만)
+    for item in rankings[:3]:
+        card = create_ranking_card(
+            rank=item["rank"],
+            photo_path=item["photo_path"],
+            keywords=item.get("keywords", [])
+        )
+        card_paths.append(card)
+    
+    return card_paths

@@ -79,3 +79,10 @@ class WorldcupInsightResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+class CardNewsResponse(BaseModel):
+    """카드뉴스 응답"""
+    worldcup_id: str
+    card_images: list[str]  # URL 리스트
+    total_cards: int
+    created_at: datetime
