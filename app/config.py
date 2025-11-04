@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     # API 기본 설정
     app_name: str = "MyCup API"
     debug: bool = True
+    secret_key: str
     
     # Database
     database_url: str
@@ -28,6 +29,7 @@ class Settings(BaseSettings):
     
     class Config:
         env_file = ".env"
+        extra = "allow"
         case_sensitive = False
 
 # 싱글톤 인스턴스

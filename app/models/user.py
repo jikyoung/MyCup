@@ -27,5 +27,9 @@ class User(Base):
     monthly_worldcup_count = Column(Integer, default=0)  # 이번 달 생성 개수
     last_reset_at = Column(DateTime(timezone=True), nullable=True)  # 마지막 리셋 시간
     
+    provider: str | None = Column(String, nullable=True)  # google, kakao, None
+    provider_id: str | None = Column(String, nullable=True)  # OAuth 제공자의 user ID
+    profile_image: str | None = Column(String, nullable=True)  # 프로필 이미지 URL
+
     def __repr__(self):
         return f"<User {self.email}>"
