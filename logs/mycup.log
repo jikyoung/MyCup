@@ -1,0 +1,13 @@
+2025-11-04 09:21:36 | INFO     | main:startup_event:67 - 🚀 MyCup API 서버 시작
+2025-11-04 09:21:38 | INFO     | main:shutdown_event:71 - 🛑 MyCup API 서버 종료
+2025-11-04 09:21:40 | INFO     | main:startup_event:67 - 🚀 MyCup API 서버 시작
+2025-11-04 09:21:40 | INFO     | main:shutdown_event:71 - MyCup API 서버 종료
+2025-11-04 09:21:42 | INFO     | main:startup_event:67 - MyCup API 서버 시작
+2025-11-04 09:22:27 | INFO     | app.core.logging_middleware:log_requests:13 - ➡️  GET /api/v1/photos/
+2025-11-04 09:22:27 | INFO     | app.core.logging_middleware:log_requests:23 - ⬅️  GET /api/v1/photos/ - Status: 401 - Time: 13.10ms
+2025-11-04 09:22:34 | INFO     | app.core.logging_middleware:log_requests:13 - ➡️  POST /api/v1/auth/login
+2025-11-04 09:22:35 | INFO     | app.core.logging_middleware:log_requests:23 - ⬅️  POST /api/v1/auth/login - Status: 200 - Time: 598.55ms
+2025-11-04 09:22:58 | INFO     | app.core.logging_middleware:log_requests:13 - ➡️  GET /api/v1/photos/
+2025-11-04 09:22:58 | INFO     | app.core.logging_middleware:log_requests:23 - ⬅️  GET /api/v1/photos/ - Status: 200 - Time: 30.61ms
+2025-11-04 09:24:10 | INFO     | app.core.logging_middleware:log_requests:13 - ➡️  POST /api/v1/worldcup/962c3d8f-649f-4114-9c7f-a43a8eb33746/matches/bf5babf3-d96f-4865-adb2-e50bf95b1876/select
+2025-11-04 09:24:10 | INFO     | app.core.logging_middleware:log_requests:23 - ⬅️  POST /api/v1/worldcup/962c3d8f-649f-4114-9c7f-a43a8eb33746/matches/bf5babf3-d96f-4865-adb2-e50bf95b1876/select - Status: 200 - Time: 40.65ms

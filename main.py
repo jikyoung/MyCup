@@ -5,14 +5,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings
 from app.api.routes import auth, photos, worldcup, share
+from app.core.logging_middleware import log_requests
+from app.core.logger import logger
 
 app = FastAPI(
     title=settings.app_name,
     debug=settings.debug
 )
 
-# ===== 요청 크기 제한 미들웨어 추가 =====
-MAX_REQUEST_SIZE = 320 * 1024 * 1024  # 320MB (16장 × 20MB)
+# ===== 로깅 미들웨어 추가 (가장 먼저) =====
+@app.middleware("http")
+async def logging_middleware(request: Request, call_next):
+    return await log_requests(request, call_next)
+# ==========================================
+
+# 요청 크기 제한 미들웨어
+MAX_REQUEST_SIZE = 320 * 1024 * 1024
 
 @app.middleware("http")
 async def limit_upload_size(request: Request, call_next):
@@ -52,6 +60,16 @@ app.include_router(share.router)
 
 # 정적 파일 서빙
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+# ===== 시작 로그 추가 =====
+@app.on_event("startup")
+async def startup_event():
+    logger.info("MyCup API 서버 시작")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("MyCup API 서버 종료")
+# ==========================
 
 @app.get("/health")
 def health_check():
