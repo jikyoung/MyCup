@@ -9,6 +9,7 @@ dependencies = [
     "bcrypt>=5.0.0",
     "email-validator>=2.3.0",
     "fastapi>=0.120.3",
+    "loguru>=0.7.3",
     "openai>=2.6.1",
     "passlib[bcrypt]>=1.7.4",
     "pillow>=12.0.0",
