@@ -11,3 +11,23 @@
 2025-11-04 09:22:58 | INFO     | app.core.logging_middleware:log_requests:23 - ⬅️  GET /api/v1/photos/ - Status: 200 - Time: 30.61ms
 2025-11-04 09:24:10 | INFO     | app.core.logging_middleware:log_requests:13 - ➡️  POST /api/v1/worldcup/962c3d8f-649f-4114-9c7f-a43a8eb33746/matches/bf5babf3-d96f-4865-adb2-e50bf95b1876/select
 2025-11-04 09:24:10 | INFO     | app.core.logging_middleware:log_requests:23 - ⬅️  POST /api/v1/worldcup/962c3d8f-649f-4114-9c7f-a43a8eb33746/matches/bf5babf3-d96f-4865-adb2-e50bf95b1876/select - Status: 200 - Time: 40.65ms
+2025-11-04 09:25:47 | INFO     | main:startup_event:67 - MyCup API 서버 시작
+2025-11-04 15:07:10 | INFO     | main:shutdown_event:71 - MyCup API 서버 종료
+2025-11-04 15:08:37 | INFO     | main:startup_event:67 - MyCup API 서버 시작
+2025-11-04 15:09:50 | INFO     | main:shutdown_event:71 - MyCup API 서버 종료
+2025-11-04 15:09:52 | INFO     | main:startup_event:67 - MyCup API 서버 시작
+2025-11-04 15:09:54 | INFO     | main:startup_event:67 - MyCup API 서버 시작
+2025-11-04 15:11:00 | INFO     | main:shutdown_event:71 - MyCup API 서버 종료
+2025-11-04 15:11:03 | INFO     | main:startup_event:67 - MyCup API 서버 시작
+2025-11-04 15:11:30 | INFO     | main:shutdown_event:71 - MyCup API 서버 종료
+2025-11-04 15:11:32 | INFO     | main:startup_event:67 - MyCup API 서버 시작
+2025-11-04 15:12:19 | INFO     | main:shutdown_event:71 - MyCup API 서버 종료
+2025-11-04 15:12:22 | INFO     | main:startup_event:67 - MyCup API 서버 시작
+2025-11-04 15:14:22 | INFO     | main:shutdown_event:71 - MyCup API 서버 종료
+2025-11-04 15:16:30 | INFO     | main:startup_event:74 - MyCup API 서버 시작
+2025-11-04 15:16:35 | INFO     | app.core.logging_middleware:log_requests:13 - ➡️  GET /api/v1/auth/google
+2025-11-04 15:16:36 | INFO     | app.core.logging_middleware:log_requests:23 - ⬅️  GET /api/v1/auth/google - Status: 302 - Time: 404.57ms
+2025-11-04 15:16:42 | INFO     | app.core.logging_middleware:log_requests:13 - ➡️  GET /api/v1/auth/kakao
+2025-11-04 15:16:42 | INFO     | app.core.logging_middleware:log_requests:23 - ⬅️  GET /api/v1/auth/kakao - Status: 307 - Time: 3.98ms
+2025-11-04 15:20:35 | INFO     | main:shutdown_event:78 - MyCup API 서버 종료
+2025-11-04 15:20:39 | INFO     | main:startup_event:74 - MyCup API 서버 시작

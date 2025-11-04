@@ -7,13 +7,20 @@ from app.config import settings
 from app.api.routes import auth, photos, worldcup, share
 from app.core.logging_middleware import log_requests
 from app.core.logger import logger
+from starlette.middleware.sessions import SessionMiddleware
+
 
 app = FastAPI(
     title=settings.app_name,
     debug=settings.debug
 )
 
-# ===== 로깅 미들웨어 추가 (가장 먼저) =====
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.secret_key  # JWT secret 재사용
+)
+
+# ===== 로깅 미들웨어 추가 =====
 @app.middleware("http")
 async def logging_middleware(request: Request, call_next):
     return await log_requests(request, call_next)
