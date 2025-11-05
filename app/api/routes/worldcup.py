@@ -1,5 +1,5 @@
 # app/api/routes/worldcup.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Body
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -7,6 +7,8 @@ from app.models.user import User
 from app.models.worldcup import Worldcup
 from app.models.match import Match
 from app.models.photo import Photo
+from app.models.share import Share
+from app.models.vote import Vote
 from app.schemas.worldcup import (
     WorldcupCreate, 
     WorldcupResponse, 
@@ -27,7 +29,56 @@ import os
 
 router = APIRouter(prefix="/api/v1/worldcup", tags=["월드컵"])
 
-@router.get("/limit", response_model=dict)
+@router.get("/public")
+def get_public_worldcups(
+    page: int = 1,
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    """공개 월드컵 목록 조회 (인증 불필요)"""
+    
+    # 페이지네이션 계산
+    offset = (page - 1) * limit
+    
+    # 공개된 월드컵 조회 (Share에서 is_public=True인 것들)
+    public_shares = db.query(Share)\
+        .filter(Share.is_public == True)\
+        .order_by(Share.created_at.desc())\
+        .offset(offset)\
+        .limit(limit)\
+        .all()
+    
+    # 월드컵 정보 수집
+    worldcups = []
+    for share in public_shares:
+        worldcup = share.worldcup
+        user = share.user
+        
+        # 투표 수 계산
+        vote_count = db.query(Vote)\
+            .filter(Vote.worldcup_id == worldcup.id)\
+            .count()
+        
+        worldcups.append({
+            "worldcup_id": worldcup.id,
+            "share_id": share.id,
+            "username": user.username,
+            "round_type": worldcup.round_type,
+            "created_at": worldcup.created_at,
+            "vote_count": vote_count
+        })
+    
+    # 전체 개수
+    total = db.query(Share).filter(Share.is_public == True).count()
+    
+    return {
+        "worldcups": worldcups,
+        "total": total,
+        "page": page,
+        "pages": (total + limit - 1) // limit
+    }
+
+@router.get("/limit")
 def get_worldcup_limit(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -394,3 +445,134 @@ def generate_cardnews(
         total_cards=len(card_urls),
         created_at=datetime.now(timezone.utc)
     )
+
+@router.post("/{worldcup_id}/vote")
+def vote_worldcup(
+    worldcup_id: str,
+    rankings: list[dict] = Body(...),  # Body로 감싸기
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """월드컵 투표 (인증 선택)"""
+    
+    # current_user 제거 (선택적 인증 복잡해서 일단 빼기)
+    
+    # 월드컵 조회
+    worldcup = db.query(Worldcup).filter(Worldcup.id == worldcup_id).first()
+    if not worldcup:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="월드컵을 찾을 수 없습니다"
+        )
+    
+    # 완료된 월드컵만 투표 가능
+    if worldcup.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="완료된 월드컵만 투표 가능합니다"
+        )
+    
+    # IP 주소 가져오기
+    ip_address = request.client.host if request else "unknown"
+    
+    # 중복 투표 체크
+    existing_vote = db.query(Vote)\
+        .filter(Vote.worldcup_id == worldcup_id, Vote.ip_address == ip_address)\
+        .first()
+    
+    if existing_vote:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미 투표한 월드컵입니다"
+        )
+    
+    # 투표 저장
+    vote = Vote(
+        worldcup_id=worldcup_id,
+        user_id=None,  # 일단 익명만
+        ip_address=ip_address,
+        rankings=rankings
+    )
+    db.add(vote)
+    db.commit()
+    
+    # 원본 결과 가져오기
+    original_rankings = worldcup_service.get_worldcup_rankings(db, worldcup_id)
+    
+    # 비교 분석
+    match_count = 0
+    for original in original_rankings[:3]:
+        for vote_rank in rankings:
+            if vote_rank["photo_id"] == original["photo"].id and vote_rank["rank"] == original["rank"]:
+                match_count += 1
+                break
+    
+    match_percentage = (match_count / 3) * 100 if len(rankings) >= 3 else 0
+    
+    return {
+        "message": "투표 완료",
+        "my_rankings": rankings,
+        "original_rankings": [
+            {
+                "rank": item["rank"],
+                "photo_id": item["photo"].id
+            }
+            for item in original_rankings[:3]
+        ],
+        "match_percentage": round(match_percentage, 1)
+    }
+
+@router.get("/{worldcup_id}/votes/stats")
+def get_vote_stats(
+    worldcup_id: str,
+    db: Session = Depends(get_db)
+):
+    """월드컵 투표 통계 조회"""
+    
+    # 월드컵 조회
+    worldcup = db.query(Worldcup).filter(Worldcup.id == worldcup_id).first()
+    if not worldcup:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="월드컵을 찾을 수 없습니다"
+        )
+    
+    # 모든 투표 가져오기
+    votes = db.query(Vote).filter(Vote.worldcup_id == worldcup_id).all()
+    
+    if not votes:
+        return {
+            "total_votes": 0,
+            "photo_stats": []
+        }
+    
+    # 사진별 순위 통계
+    photo_stats = {}
+    
+    for vote in votes:
+        for ranking in vote.rankings:
+            photo_id = ranking["photo_id"]
+            rank = ranking["rank"]
+            
+            if photo_id not in photo_stats:
+                photo_stats[photo_id] = {
+                    "photo_id": photo_id,
+                    "rank_1_count": 0,
+                    "rank_2_count": 0,
+                    "rank_3_count": 0,
+                    "rank_4_count": 0
+                }
+            
+            if rank == 1:
+                photo_stats[photo_id]["rank_1_count"] += 1
+            elif rank == 2:
+                photo_stats[photo_id]["rank_2_count"] += 1
+            elif rank == 3:
+                photo_stats[photo_id]["rank_3_count"] += 1
+            elif rank == 4:
+                photo_stats[photo_id]["rank_4_count"] += 1
+    
+    return {
+        "total_votes": len(votes),
+        "photo_stats": list(photo_stats.values())
+    }
