@@ -380,6 +380,8 @@ def get_worldcup_insights(
   
 
 @router.post("/{worldcup_id}/cardnews", response_model=CardNewsResponse)
+
+@router.post("/{worldcup_id}/cardnews", response_model=CardNewsResponse)
 def generate_cardnews(
     worldcup_id: str,
     current_user: User = Depends(get_current_user),
@@ -412,28 +414,65 @@ def generate_cardnews(
     # 순위 계산
     rankings_data = worldcup_service.get_worldcup_rankings(db, worldcup_id)
     
-    # AI 분석
-    photo_paths = [item["photo"].file_path for item in rankings_data]
-    batch_analysis = ai_service.analyze_multiple_photos(photo_paths)
-    winner_analysis = ai_service.analyze_photo_from_path(rankings_data[0]["photo"].file_path)
-    insight_story = ai_service.generate_insight_story(batch_analysis, winner_analysis)
-    
-    # 카드뉴스 데이터 준비
-    rankings_for_card = []
-    for item in rankings_data[:3]:  # TOP 3만
-        # 개별 사진 분석
-        photo_analysis = ai_service.analyze_photo_from_path(item["photo"].file_path)
-        rankings_for_card.append({
-            "rank": item["rank"],
-            "photo_path": item["photo"].file_path,
-            "keywords": photo_analysis["keywords"]
-        })
+    # AI 캐시 재사용
+    if worldcup.analysis_result:
+        print("===== 캐시된 AI 분석 결과 사용 (빠름!) =====")
+        overall_keywords = worldcup.analysis_result["overall_keywords"]
+        insight_story = worldcup.analysis_result["insight_story"]
+        
+        # 개별 사진 분석 (캐싱 적용!)
+        rankings_for_card = []
+        for item in rankings_data[:3]:
+            photo_analysis = ai_service.analyze_photo_from_path(
+                item["photo"].file_path,
+                photo_id=item["photo"].id,  # photo_id 전달
+                db=db  # db 전달
+            )
+            rankings_for_card.append({
+                "rank": item["rank"],
+                "photo_path": item["photo"].file_path,
+                "keywords": photo_analysis["keywords"]
+            })
+    else:
+        print("===== 새로운 AI 분석 실행 (느림) =====")
+        photo_paths = [item["photo"].file_path for item in rankings_data]
+        batch_analysis = ai_service.analyze_multiple_photos(photo_paths)
+        winner_analysis = ai_service.analyze_photo_from_path(
+            rankings_data[0]["photo"].file_path,
+            photo_id=rankings_data[0]["photo"].id,
+            db=db
+        )
+        insight_story = ai_service.generate_insight_story(batch_analysis, winner_analysis)
+        overall_keywords = batch_analysis["overall_keywords"]
+        
+        # 개별 사진 분석 (캐싱 적용!)
+        rankings_for_card = []
+        for item in rankings_data[:3]:
+            photo_analysis = ai_service.analyze_photo_from_path(
+                item["photo"].file_path,
+                photo_id=item["photo"].id,
+                db=db
+            )
+            rankings_for_card.append({
+                "rank": item["rank"],
+                "photo_path": item["photo"].file_path,
+                "keywords": photo_analysis["keywords"]
+            })
+        
+        # 캐시 저장
+        worldcup.analysis_result = {
+            "overall_keywords": overall_keywords,
+            "primary_emotion": batch_analysis["primary_emotion"],
+            "insight_story": insight_story
+        }
+        db.commit()
     
     # 카드뉴스 생성
     card_paths = cardnews_service.generate_cardnews(
         insight_story=insight_story,
-        overall_keywords=batch_analysis["overall_keywords"],
-        rankings=rankings_for_card
+        overall_keywords=overall_keywords,
+        rankings=rankings_for_card,
+        is_premium=current_user.is_premium
     )
     
     # URL로 변환
