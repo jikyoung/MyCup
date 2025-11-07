@@ -1,4 +1,5 @@
 # app/services/ai_service.py
+import json
 from openai import OpenAI
 from app.config import settings
 import base64
@@ -22,65 +23,64 @@ def encode_image_to_base64(image_path: str) -> str:
     retry=retry_if_exception_type((APIError, APITimeoutError, RateLimitError)),
     reraise=True
 )
-def analyze_photo_from_path(image_path: str) -> dict:
-    """파일 경로로 사진 분석 (재시도 포함)"""
+
+def analyze_photo_from_path(file_path: str, photo_id: str = None, db = None) -> dict:
+    """사진 분석 (캐싱 지원)"""
+    from app.models.photo import Photo
     
-    try:
-        # 이미지를 base64로 인코딩
-        base64_image = encode_image_to_base64(image_path)
-        
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "이 사진을 분석해서 다음 정보를 JSON 형식으로 알려줘:\n1. keywords: 이 사진의 주요 키워드 3개 (한글)\n2. emotion: 사진의 감정 (happy/peaceful/excited/nostalgic 중 하나)\n3. description: 사진에 대한 한 줄 설명 (한글, 20자 이내)\n\n응답은 반드시 JSON만 출력해줘."
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            }
-                        }
-                    ]
-                }
-            ],
-            max_tokens=300
-        )
-        
-        # 응답 가져오기
-        content = response.choices[0].message.content.strip()
-        
-        # 마크다운 코드 블록 제거
-        if content.startswith("```"):
-            content = content.replace("```json", "").replace("```", "").strip()
-        
-        # JSON 파싱
-        import json
-        result = json.loads(content)
-        
-        return {
-            "keywords": result.get("keywords", []),
-            "emotion": result.get("emotion", "peaceful"),
-            "description": result.get("description", "")
-        }
-        
-    except (APIError, APITimeoutError, RateLimitError) as e:
-        # 재시도 가능한 에러 - tenacity가 자동 재시도
-        print(f"OpenAI API 에러 (재시도 중): {e}")
-        raise
-        
-    except Exception as e:
-        # 재시도 불가능한 에러 - 기본값 반환
-        print(f"AI 분석 실패 (복구 불가): {e}")
-        return {
-            "keywords": ["추억", "순간", "감성"],
-            "emotion": "peaceful",
-            "description": "특별한 순간"
-        }
+    # ===== 캐시 확인 =====
+    if photo_id and db:
+        photo = db.query(Photo).filter(Photo.id == photo_id).first()
+        if photo and photo.analysis_result:
+            print(f"===== 사진 {photo_id} 캐시 사용 =====")
+            return photo.analysis_result
+    # ====================
+    
+    # 캐시 없으면 분석
+    print(f"===== 사진 {photo_id or file_path} 새 분석 =====")
+    
+    # Base64 인코딩
+    with open(file_path, "rb") as image_file:
+        base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+    
+    # GPT-4 Vision 호출
+    prompt = """이 사진을 분석해주세요:
+1. 키워드 3개 (한글, 간결하게)
+2. 감정 1개 (happy/peaceful/excited/nostalgic 중 하나)
+3. 한 줄 설명 (20자 이내)
+
+JSON 형식:
+{"keywords": ["키워드1", "키워드2", "키워드3"], "emotion": "happy", "description": "설명"}
+"""
+    
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                ]
+            }
+        ],
+        max_tokens=300
+    )
+    
+    result_text = response.choices[0].message.content.strip()
+    result_text = result_text.replace("```json", "").replace("```", "").strip()
+    result = json.loads(result_text)
+    
+    # ===== 캐시 저장 =====
+    if photo_id and db:
+        photo = db.query(Photo).filter(Photo.id == photo_id).first()
+        if photo:
+            photo.analysis_result = result
+            db.commit()
+            print(f"===== 사진 {photo_id} 캐시 저장 완료 =====")
+    # ====================
+    
+    return result
 
 def analyze_multiple_photos(photo_paths: list[str]) -> dict:
     """여러 사진 배치 분석 (에러 핸들링 강화)"""

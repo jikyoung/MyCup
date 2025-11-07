@@ -17,8 +17,27 @@ OUTPUT_DIR = "uploads/cardnews"
 # 출력 폴더 생성
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+def wrap_text(text: str, max_length: int = 40) -> list[str]:
+    """텍스트를 지정된 길이로 줄바꿈"""
+    words = text.split()
+    lines = []
+    current_line = ""
+    
+    for word in words:
+        if len(current_line + word) <= max_length:
+            current_line += word + " "
+        else:
+            if current_line:
+                lines.append(current_line.strip())
+            current_line = word + " "
+    
+    if current_line:
+        lines.append(current_line.strip())
+    
+    return lines
 
-def create_cover_card(insight_story: dict, overall_keywords: list[str]) -> str:
+
+def create_cover_card(insight_story: dict, overall_keywords: list[str], is_premium: bool = False) -> str:
     """표지 카드 생성"""
     
     # 이미지 생성
@@ -34,21 +53,44 @@ def create_cover_card(insight_story: dict, overall_keywords: list[str]) -> str:
     draw.text((540, 400), "나의 2024", font=title_font, fill=PRIMARY_COLOR, anchor="mm")
     draw.text((540, 550), "TOP 4", font=title_font, fill=PRIMARY_COLOR, anchor="mm")
     
-    # AI 인사이트
+    # ===== AI 인사이트 (줄바꿈 적용) =====
     summary = insight_story.get("summary", "")
-    draw.text((540, 800), summary, font=subtitle_font, fill=TEXT_COLOR, anchor="mm")
+    summary_lines = wrap_text(summary, max_length=20)  # 짧게
     
+    y_position = 800
+    for line in summary_lines[:2]:  # 최대 2줄
+        draw.text((540, y_position), line, font=subtitle_font, fill=TEXT_COLOR, anchor="mm")
+        y_position += 80
+    
+    # detail (작은 글씨)
     detail = insight_story.get("detail", "")
-    draw.text((540, 920), detail, font=keyword_font, fill=SECONDARY_COLOR, anchor="mm")
+    detail_lines = wrap_text(detail, max_length=25)
+    
+    y_position = 950
+    for line in detail_lines[:2]:  # 최대 2줄
+        draw.text((540, y_position), line, font=keyword_font, fill=SECONDARY_COLOR, anchor="mm")
+        y_position += 70
+    # =====================================
     
     # 키워드
     keywords_text = " · ".join(overall_keywords[:3])
-    draw.text((540, 1100), f"#{keywords_text}", font=keyword_font, fill=PRIMARY_COLOR, anchor="mm")
+    draw.text((540, 1150), f"#{keywords_text}", font=keyword_font, fill=PRIMARY_COLOR, anchor="mm")
     
     # 날짜
     date_text = datetime.now().strftime("%Y.%m.%d")
     date_font = ImageFont.truetype(FONT_PATH, 40)
     draw.text((540, 1700), date_text, font=date_font, fill=SECONDARY_COLOR, anchor="mm")
+    
+    # 워터마크
+    if not is_premium:
+        watermark_font = ImageFont.truetype(FONT_PATH, 35)
+        draw.text(
+            (540, 1850), 
+            "Made with MyCup", 
+            font=watermark_font, 
+            fill=(180, 180, 180),
+            anchor="mm"
+        )
     
     # 저장
     filename = f"cover_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
@@ -58,7 +100,7 @@ def create_cover_card(insight_story: dict, overall_keywords: list[str]) -> str:
     return filepath
 
 
-def create_ranking_card(rank: int, photo_path: str, keywords: list[str]) -> str:
+def create_ranking_card(rank: int, photo_path: str, keywords: list[str], is_premium: bool = False) -> str:
     """순위 카드 생성"""
     
     # 이미지 생성
@@ -98,6 +140,18 @@ def create_ranking_card(rank: int, photo_path: str, keywords: list[str]) -> str:
         keywords_text = " · ".join(keywords[:3])
         draw.text((540, 1400), keywords_text, font=keyword_font, fill=PRIMARY_COLOR, anchor="mm")
     
+    # ===== 워터마크 추가 (무료 유저만) =====
+    if not is_premium:
+        watermark_font = ImageFont.truetype(FONT_PATH, 30)
+        draw.text(
+            (540, 1850), 
+            "Made with MyCup", 
+            font=watermark_font, 
+            fill=(180, 180, 180), 
+            anchor="mm"
+        )
+    # =====================================
+    
     # 저장
     filename = f"rank{rank}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
     filepath = os.path.join(OUTPUT_DIR, filename)
@@ -106,26 +160,28 @@ def create_ranking_card(rank: int, photo_path: str, keywords: list[str]) -> str:
     return filepath
 
 
+
 def generate_cardnews(
     insight_story: dict,
     overall_keywords: list[str],
-    rankings: list[dict]  # [{"rank": 1, "photo_path": "...", "keywords": [...]}]
+    rankings: list[dict],
+    is_premium: bool = False
 ) -> list[str]:
-    """카드뉴스 전체 생성"""
+    """카드뉴스 생성 (표지 + 순위 카드들)"""
     
     card_paths = []
     
-    # 1. 표지
-    cover = create_cover_card(insight_story, overall_keywords)
-    card_paths.append(cover)
+    # 1. 표지 카드
+    cover_path = create_cover_card(insight_story, overall_keywords, is_premium)  # 전달
+    card_paths.append(cover_path)
     
-    # 2. 순위별 카드 (TOP 3만)
-    for item in rankings[:3]:
-        card = create_ranking_card(
-            rank=item["rank"],
-            photo_path=item["photo_path"],
-            keywords=item.get("keywords", [])
-        )
-        card_paths.append(card)
+    # 2. 순위 카드들 (TOP 3)
+    for ranking in rankings[:3]:
+        rank = ranking["rank"]
+        photo_path = ranking["photo_path"]
+        keywords = ranking["keywords"]
+        
+        card_path = create_ranking_card(rank, photo_path, keywords, is_premium)  # 전달
+        card_paths.append(card_path)
     
     return card_paths

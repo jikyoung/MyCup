@@ -1,5 +1,5 @@
 # app/models/photo.py
-from sqlalchemy import Column, String, DateTime, ForeignKey
+from sqlalchemy import Column, String, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -27,6 +27,8 @@ class Photo(Base):
     
     # 관계
     user = relationship("User", backref="photos")
+
+    analysis_result = Column(JSON, nullable=True)
     
     def __repr__(self):
         return f"<Photo {self.filename}>"
